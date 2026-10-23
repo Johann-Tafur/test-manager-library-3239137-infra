@@ -1,0 +1,64 @@
+# Manager Library — un solo comando: docker compose up --build
+# El motor arranca VACÍO (ADR-001): este repo no contiene DDL. Las tablas las crean las migraciones de la API.
+name: manager-library
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-library}
+      POSTGRES_USER: ${DB_USERNAME:-library}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD en .env}
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT_HOST:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-library} -d ${DB_DATABASE:-library}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [library]
+
+  api:
+    build: ${API_PATH:-../test-manager-library-3239137-api}
+    environment:
+      APP_KEY: ${APP_KEY:?Defina APP_KEY en .env}
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: ${DB_DATABASE:-library}
+      DB_USERNAME: ${DB_USERNAME:-library}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET en .env}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:?Defina ADMIN_USERNAME en .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Defina ADMIN_PASSWORD en .env}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      COVERS_DIR: /var/covers
+    volumes:
+      - covers:/var/covers
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [library]
+
+  app:
+    build:
+      context: ${APP_PATH:-../test-manager-library-3239137-app}
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api/v1}
+    ports:
+      - "5173:5173"
+    depends_on: [api]
+    networks: [library]
+
+volumes:
+  pgdata:
+  covers:
+
+networks:
+  library:
